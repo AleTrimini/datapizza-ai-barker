@@ -133,6 +133,20 @@ class OpenAIClient(Client):
                 default_query=self.default_query,
             )
 
+    def _token_usage_from_metadata(self, usage_metadata) -> TokenUsage:
+        if not usage_metadata:
+            return TokenUsage()
+
+        input_tokens_details = getattr(usage_metadata, "input_tokens_details", None)
+        output_tokens_details = getattr(usage_metadata, "output_tokens_details", None)
+
+        return TokenUsage(
+            prompt_tokens=getattr(usage_metadata, "input_tokens", 0) or 0,
+            completion_tokens=getattr(usage_metadata, "output_tokens", 0) or 0,
+            cached_tokens=getattr(input_tokens_details, "cached_tokens", 0) or 0,
+            thinking_tokens=getattr(output_tokens_details, "reasoning_tokens", 0) or 0,
+        )
+
     def _response_to_client_response(
         self, response, tool_map: dict[str, Tool] | None
     ) -> ClientResponse:
@@ -174,15 +188,7 @@ class OpenAIClient(Client):
                         )
                     )
 
-        # Handle usage from new format
-        usage = getattr(response, "usage", None)
-        if usage:
-            prompt_tokens = getattr(usage, "input_tokens", 0)
-            completion_tokens = getattr(usage, "output_tokens", 0)
-            cached_tokens = 0
-            # Handle input_tokens_details for cached tokens
-            if hasattr(usage, "input_tokens_details") and usage.input_tokens_details:
-                cached_tokens = getattr(usage.input_tokens_details, "cached_tokens", 0)
+        token_usage = self._token_usage_from_metadata(getattr(response, "usage", None))
 
         # Handle stop reason - use status from new format
         stop_reason = getattr(response, "status", None)
@@ -192,11 +198,7 @@ class OpenAIClient(Client):
         return ClientResponse(
             content=blocks,
             stop_reason=stop_reason,
-            usage=TokenUsage(
-                prompt_tokens=prompt_tokens or 0,
-                completion_tokens=completion_tokens or 0,
-                cached_tokens=cached_tokens or 0,
-            ),
+            usage=token_usage,
         )
 
     def _convert_tools(self, tool: Tool) -> dict:

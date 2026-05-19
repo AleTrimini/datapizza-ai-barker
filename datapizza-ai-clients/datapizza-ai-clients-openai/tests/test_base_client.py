@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -14,6 +15,35 @@ def test_client_init():
         api_key="test_api_key",
     )
     assert client is not None
+
+
+def test_token_usage_maps_reasoning_tokens():
+    client = object.__new__(OpenAIClient)
+    usage_metadata = SimpleNamespace(
+        input_tokens=41,
+        output_tokens=456,
+        input_tokens_details=SimpleNamespace(cached_tokens=7),
+        output_tokens_details=SimpleNamespace(reasoning_tokens=192),
+    )
+
+    usage = client._token_usage_from_metadata(usage_metadata)
+
+    assert usage.prompt_tokens == 41
+    assert usage.completion_tokens == 456
+    assert usage.cached_tokens == 7
+    assert usage.thinking_tokens == 192
+
+
+def test_token_usage_defaults_missing_details_to_zero():
+    client = object.__new__(OpenAIClient)
+    usage_metadata = SimpleNamespace(input_tokens=41, output_tokens=456)
+
+    usage = client._token_usage_from_metadata(usage_metadata)
+
+    assert usage.prompt_tokens == 41
+    assert usage.completion_tokens == 456
+    assert usage.cached_tokens == 0
+    assert usage.thinking_tokens == 0
 
 
 @patch("datapizza.clients.openai.openai_client.OpenAI")
